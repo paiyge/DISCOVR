@@ -1,0 +1,369 @@
+---
+title: "DISCOVR_SOT_Markdown"
+author: "Paige Norris - NREL"
+date: "3/27/2022"
+output: html_document
+---
+
+# Introduction
+
+Reads in the list of experiments and basic format of the cultivation sheets from ASU and
+compiles it into 3 files, cultivation data, ysi (pond water chemistry), and weather 
+works of a key file which contains the filename and formats of the to be scraped sheets.
+
+# Using this script
+
+1. Download the free RStudio IDE software at: https://www.rstudio.com/products/rstudio/download/#download
+2. Open this file in the IDE.
+3. Set the working directory by identifying the folder where all data files are saved.
+```R
+setwd("~/Desktop/R")}
+```
+4. Click "Run" button.
+5. All created files will be saved in the working directory folder and can be seen in the "Environment" window to the right.
+
+### Required libraries
+
+```R
+library(readxl)
+```
+
+# Reading in the master files and preparing the existing files 
+
+Read in the master file containing the list of SOT spreadsheets and versions to read in and munge
+```R
+theFiles  <- read_excel("DISCOVR_SOT_Experiment List_Paige.xlsx", sheet=1,skip=0)
+```
+
+Drop to only those files that need to be scraped or re-scraped this requires that File.Read is updated in "DISCOVR_SOT_Experiment List.xlsx"
+```R
+theFiles  <- subset(theFiles, theFiles$File.Read == TRUE)
+```
+
+Checks for existing file from the same day and removes and replaces while keeping older files. If re-doing scrapes multiple times in one day, do this every time
+These are the file names for the temporary scrape output files.
+```R
+{  HOFout       <- paste("tmpHO.",Sys.Date(),".csv",sep="")
+ if (file.exists(HOFout)){ file.remove(HOFout) }
+  
+AFDWFout     <- paste("tmpAFDW.",Sys.Date(),".csv",sep="")
+ if (file.exists(AFDWFout)){ file.remove(AFDWFout) }
+  
+ODFout       <- paste("tmpOD.",Sys.Date(),".csv",sep="")
+ if (file.exists(ODFout)){ file.remove(ODFout) }
+
+DNDTFout     <- paste("tmpDNDT.",Sys.Date(),".csv",sep="")
+ if (file.exists(DNDTFout)){ file.remove(DNDTFout) }
+  
+ActivityFout <- paste("tmpActvity.",Sys.Date(),".csv",sep="")
+ if (file.exists(ActivityFout)){ file.remove(ActivityFout) }
+}
+```
+
+# Building cultivation data
+
+Loops through all toREAD files and builds Harvest Ops (HO), AFDW, OD, DNDT, and Activity ".xlsx" file.
+
+```R
+for (j in 1:dim(theFiles)[1])
+  {
+    cat("j= ", j, "\n")
+    
+    toREADHO  <-theFiles$File.Read[j] & theFiles$Harvest.Read[j]   	
+    print("Harvest Ops")
+    cat("toREADHO= ", toREADHO)
+    if(toREADHO==TRUE)
+    
+    {
+    FN     <-theFiles$FileName[j]									                  
+    print(FN)
+    SRHO      <-theFiles$Harvest.StartRow[j]			                   
+    print(SRHO)
+    SCHO      <-theFiles$Harvest.StartCol[j]								         
+    print(SCHO) 
+    verHO     <-theFiles$Harvest.Format[j]								          
+    ECHO    	 <-theFiles$Harvest.EndCol[j]                          
+    ERHO       <- NA                                               
+    SNHO       <-theFiles$Harvest.SheetNum[j]                        
+    print(SNHO)
+```
+
+Renaming columns
+```R
+    tmpHOSE             <- read_excel(FN,sheet = SNHO, range = cell_limits(c(SRHO,SCHO), c(ERHO,ECHO)),  col_names = TRUE, .name_repair = "minimal", col_types = "text")
+    tmpHOSE$SOT.Season  <- theFiles$Season[j]
+    tmpHOSE$SOT.Year    <- theFiles$SOT.Year[j]
+    HO                  <- tmpHOSE[,c('SiteID', 'SOT.Year', 'SOT.Season', 'ExperimentID', 
+'StrainID', 'DateTime','Experiment Duration (Days)', 'TreatmentID', 'PondID','Harvest Number','Days Between Harvest (days)', 'Depth at sampling (cm)','Pond Depth After Harvest (cm)','Estimated Volume Harvested (L)','Concentration at Harvest (g/L AFDW)','Estimated Biomass Harvested (g)','% Volume Harvested','% Change in OD after Harvest','% Change in AFDW after Harvest','Pond Crash','Please use this column to note what is happening in the ponds from a harvest and/or contamination perspective','AHYP all ponds','AHYP-H2H  all ponds')]
+```
+
+Reformatting datetime
+```R
+    HO$DateTime         <- as.POSIXct(as.numeric(HO[["DateTime"]]) * (60*60*24), origin="1899-12-30", tz="GMT")
+    HO                  <- subset(HO, !is.na(HO$DateTime))
+```
+
+If no duration per event will drop levels
+```R  
+    HO[is.na(HO)]       <- ""
+    expID               <- unique(HO$ExperimentID)  # set global identifier theExp (ExperimentID) for use in the activity log scrape
+   
+    write.table(HO, HOFout, sep=",", append=TRUE, row.names =FALSE, col.names = TRUE)
+    }
+```
+
+# Reading complete tables back in and merge into one sheet having all cultivation data
+
+```R
+{ 
+  HO_in    <- read.csv(HOFout, stringsAsFactors = FALSE)
+HO_in$DateTime   <-as.POSIXct(HO_in$DateTime, format= "%Y-%m-%d %H:%M:%S")
+HO_in      <- subset(HO_in, !is.na(HO_in$DateTime))
+
+AFDW_in  <- read.csv(AFDWFout, stringsAsFactors = FALSE)
+AFDW_in$DateTime  <- as.POSIXct(AFDW_in$DateTime, format= "%Y-%m-%d %H:%M:%S")
+AFDW_in      <- subset(AFDW_in, !is.na(AFDW_in$DateTime))
+
+OD_in    <- read.csv(ODFout, stringsAsFactors = FALSE)
+OD_in$DateTime  <- as.POSIXct(OD_in$DateTime, format= "%Y-%m-%d %H:%M:%S")
+OD_in      <- subset(OD_in, !is.na(OD_in$DateTime))
+
+DNDT_in    <- read.csv(DNDTFout, stringsAsFactors = FALSE)
+DNDT_in$DateTime  <- as.POSIXct(DNDT_in$DateTime, format= "%Y-%m-%d %H:%M:%S")
+DNDT_in      <- subset(DNDT_in, !is.na(DNDT_in$DateTime))
+
+HO_AFDW      <- merge(HO_in, AFDW_in, by = c('DateTime', 'PondID'))
+HO_AFDW_OD   <- merge(HO_AFDW, OD_in, by = c('DateTime', 'PondID'))
+cultivation_data    <- merge(HO_AFDW_OD, DNDT_in, by = c('DateTime', 'PondID'))
+
+names(cultivation_data)[names(cultivation_data) == "X..Volume.Harvested"]    <- "% Volume Harvested"
+names(cultivation_data)[names(cultivation_data) == "X..Change.in.OD.after.Harvest"]    <- "% Change in OD after Harvest"
+names(cultivation_data)[names(cultivation_data) == "X..Change.in.AFDW.after.Harvest"]    <- "% Change in AFDW after Harvest"
+names(cultivation_data)[names(cultivation_data) == "X.ASH.AVE"]    <- "% ASH-AVE"
+
+CultFout       <- paste("Cultivation Data.",Sys.Date(),".csv",sep="")
+if (file.exists(CultFout)){ file.remove(CultFout) }
+
+write.csv(cultivation_data,CultFout, row.names = FALSE)
+}
+```
+
+# Building YSI data 
+
+This part is a little different as its pulling from YSI which has a larger data set and requires a new data frame be created in the end to merge the multi pond data.
+```R
+YSIFout       <- paste("YSI.",Sys.Date(),".csv",sep="")
+if (file.exists(YSIFout)){ file.remove(YSIFout)      }
+
+for(j in 1:dim(theFiles)[1]) 
+{
+  toREADYSI  <-theFiles$File.Read[j] & theFiles$YSI.Read[j]   	 # BOOLEAN - read this workbook page?
+  print(toREADYSI)
+  if(toREADYSI==TRUE){
+    
+    FNYSI     <-theFiles$FileName[j]									         #spreadsheet file name to read
+    print(FNYSI)
+    SRYSI      <-theFiles$YSI.StartRow[j]			              		 #start row 
+    print(SRYSI)
+    SCYSI      <-theFiles$YSI.StartCol[j]								         #start column
+    print(SCYSI)
+    verYSI     <-theFiles$YSI.Format[j]								           #format of the worksheet to be read
+    print(verYSI)
+    ECYSI    	 <-theFiles$YSI.EndCol[j]                       #end column
+    print(ECYSI)
+    ERYSI       <- NA                                        #end row. NA so reads in all rows with data
+    print(ERYSI)
+    SNYSI       <-theFiles$YSI.SheetNum[j]                         #sheet number
+   
+    tmpYSI     <-read_excel(FNYSI,sheet = SNYSI, range = cell_limits(c(SRYSI,SCYSI), c(ERYSI,ECYSI)), .name_repair = "minimal", col_types = "text" )
+    
+   strainID  <-read_excel(FNYSI,sheet = 3, range = cell_limits(c(35,1),c(NA,5)), .name_repair = "minimal", col_types = "text" )
+``` 
+
+# Combining separate pond data sets into single dataframe
+
+Takes the 6 seperate pond datasets and combines them into one single dataframe with 10 variables
+first 6 seperate data frames are created, each containing the 10 variables: PondID, DATETIME, pH, ORP, Temperture, Conductivity, Dissolved Oxygen, Salinity, PAR
+Then the DF are rBinded into comboYSI and a subset is made of the rows which do not contain NA in the DATETIME column
+
+```R
+    DF1<-tmpYSI[3:12]
+    DF1$ExperimentID<-tmpYSI$ExperimentID
+    DF1$SiteID<-tmpYSI$SiteID
+    DF1$StrainID<-strainID$StrainID[1]
+    
+    DF2<-tmpYSI[13:22]
+    DF2$ExperimentID<-tmpYSI$ExperimentID
+    DF2$SiteID<-tmpYSI$SiteID
+    DF2$StrainID<-strainID$StrainID[1]
+    
+    DF3<-tmpYSI[23:32]
+    DF3$ExperimentID<-tmpYSI$ExperimentID
+    DF3$SiteID<-tmpYSI$SiteID
+    DF3$StrainID<-strainID$StrainID[1]
+    
+    DF4<-tmpYSI[33:42]
+    DF4$ExperimentID<-tmpYSI$ExperimentID
+    DF4$SiteID<-tmpYSI$SiteID
+    DF4$StrainID<-strainID$StrainID[1]
+    
+    DF5<-tmpYSI[43:52]
+    DF5$ExperimentID<-tmpYSI$ExperimentID
+    DF5$SiteID<-tmpYSI$SiteID
+    DF5$StrainID<-strainID$StrainID[1]
+    
+    DF6<-tmpYSI[53:62]
+    DF6$ExperimentID<-tmpYSI$ExperimentID
+    DF6$SiteID<-tmpYSI$SiteID
+    DF6$StrainID<-strainID$StrainID[1]
+    
+    comboYSI<-rbind(DF1,DF2,DF3,DF4,DF5,DF6)
+    comboYSI<-subset(comboYSI, !is.na(DATETIME))
+    comboYSI$DATETIME<- as.POSIXct(as.numeric(comboYSI[["DATETIME"]]) * (60*60*24), origin="1899-12-30", tz="GMT")
+    
+    comboYSI<-subset(comboYSI, !is.na(ExperimentID))
+    
+    k <-comboYSI[c("SiteID","ExperimentID","StrainID","PondID","DATETIME",
+                  "pH","ORP           (mV)","Temperature (oC)",
+                  "Conductivity  (mS/cm)","Dissolved Oxygen  (mg/L)",
+                  "Oxygen Sat%","Salinity (g/L)","PAR  (umol photons/m2 s)"
+    )]
+    
+```
+
+Writing PAR data to table, writing YSI data to table
+```R
+    ParProbs<-data.frame("DATETIME"=comboYSI$DATETIME,"PAR  (umol photons/m2 s)"=comboYSI$`PAR  (umol photons/m2 s)`) 
+write out table
+
+    write.table(ParProbs,"parprobs.csv", sep=",",append = TRUE, row.names = FALSE, col.names = TRUE)
+    write.table(k, YSIFout, sep=",", append=TRUE, row.names =FALSE, col.names = TRUE)
+    }
+}
+
+```
+
+# Beuilding weather
+
+Reading in file
+```R
+WFout<- paste("Weather.",Sys.Date(),".csv",sep="")
+if (file.exists(WFout)){ file.remove(WFout)      }
+
+for (j in 1:dim(theFiles)[1])
+{
+  print("this is j ") 
+  print(j)
+  toREADW  <-theFiles$File.Read[j] & theFiles$W.Read[j]   	
+  print(toREADW)
+  if(toREADW==TRUE){
+   
+    FNW     <-theFiles$FileName[j]									         
+    print(FNW)
+    SRW      <-theFiles$W.StartRow[j]			              		
+    print(SRW)
+    SCW      <-theFiles$W.StartCol[j]								         
+    print(SCW)
+    verW     <-theFiles$W.Format[j]								          
+    print(verW)
+    ECW    	 <-NA                         
+    print(ECW)
+    ERW       <- NA                                           
+    SNW       <-theFiles$W.SheetNum[j]                     
+    print(SNW)
+    tmpW<- read_excel(FNW,sheet = SNW, range = cell_limits(c(SRW,SCW), c(ERW,ECW)))
+    
+    strainID  <-read_excel(FNW,sheet = 3, range = cell_limits(c(35,1),c(NA,5)), .name_repair = "minimal", col_types = "text" )
+    tmpW$StrainID<-strainID$StrainID[1]
+```
+Dealing with buggy timepoints
+```R
+    TroubleMakers<-data.frame("Precip","wdsp","WDDIR","Datetime"=tmpW$DATETIME)
+    if("PRECIP (mm)" %in% colnames(tmpW ))
+    {
+      TroubleMakers$Precip<-tmpW$`PRECIP (mm)`
+      cat("Yep, it's in there!\n");
+    } else{TroubleMakers$Precip<-(as.numeric(tmpW$`PRECIP (cm)`*10))
+    print("its not here")}
+    
+    if("WDSPD (m/s)" %in% colnames(tmpW ))
+    {
+      TroubleMakers$X.wdsp.<-tmpW$`WDSPD (m/s)`
+      cat("Yep, it's in there!\n");
+    } else{TroubleMakers$X.wdsp.<-(as.numeric((tmpW$`WDSPD (km/hr)`*1000)/3600))
+    print("its not here")}
+```
+
+Renaming
+```R
+    Weather<-tmpW[c("SiteID",
+                    "ExperimentID", 
+                    "StrainID",
+                    "DATETIME",
+                    "AIRTEMP (oC)",
+                    "HUMID (RH %)",
+                    "Global Light Energy  (W/m2)",
+                    "WDDIR (degrees)",
+                    "HOBO PAR"
+    )]
+    Weather$"PRECIP (mm)"=TroubleMakers$Precip 
+    Weather$"WDSPD (m/s)"=TroubleMakers$X.wdsp.
+    Weather$"Year"=theFiles$Year[j]
+    
+    Weather <- Weather[Weather$ExperimentID!="ExperimentID",]
+    Weather <- subset(Weather, !is.na(Weather$DATETIME))
+```
+Writing new tables and files
+```R
+    write.table(Weather, WFout, sep=",", append=TRUE, row.names =FALSE, col.names = TRUE)
+  }}
+  
+finalWeather<-read.csv(WFout)
+
+Finalparprobs<-read.csv("parprobs.csv",sep = ',')
+
+finalWeather<-merge(finalWeather,Finalparprobs, by.x = "DATETIME") #changed by.x=TRUE to by.x=DATETIME
+
+
+finalWeather<-finalWeather[finalWeather$ExperimentID!="ExperimentID",]
+Weather18<-finalWeather[finalWeather$Year== "2018",]
+#removes repeats of column headers 
+write.table(Weather18,"CompleteWeather2018.csv",sep=",", append=TRUE, row.names =FALSE, col.names = TRUE)
+
+Weather19<-finalWeather[finalWeather$Year== "2019",]
+#removes repeats of column headers 
+write.table(Weather19,"CompleteWeather2019.csv",sep=",", append=TRUE, row.names =FALSE, col.names = TRUE)
+
+Weather20<-finalWeather[finalWeather$Year== "2020",]
+#removes repeats of column headers 
+write.table(Weather20,"CompleteWeather2020.csv",sep=",", append=TRUE, row.names =FALSE, col.names = TRUE)
+```
+
+#Start of final file formatting
+
+#Merge in Analytical Data
+
+Drop to only those files that need to be scraped or re-scraped
+This requires that File.Read is updated in "DISCOVR_SOT_Experiment List.xlsx"
+```R
+theComp   <-read.csv("FY20_SOT_Composition_Full_20211117.csv", sep = ",")
+theComp  <- subset(theComp, theComp$AnalyticalID != "")
+
+theCult  <- read.csv("Cultivation Data.2021-11-17.csv", stringsAsFactors = FALSE)
+theCult  <- theCult[-c(42)]
+
+
+Cult_Comp  <- merge(theCult, theComp, all.x = TRUE, by = "AnalyticalID")
+```
+
+Drop those with no ExperimentID
+```R
+Cult_Comp  <- subset(Cult_Comp, Cult_Comp$ExperimentID != "")
+
+
+write.csv(Cult_Comp, "Cult_CompFout.csv", row.names = FALSE)
+```
+
+#### Careful!! This will delete everything!
+
+rm(list=ls(all=TRUE))
