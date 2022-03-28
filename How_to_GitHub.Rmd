@@ -1,0 +1,13 @@
+---
+title: "How_to_GitHub"
+author: "Paige Norris - NREL"
+date: "3/28/2022"
+output: html_document
+---
+
+# Introduction 
+
+# Making an account 
+
+# Being added to the ALGAE repository 
+
