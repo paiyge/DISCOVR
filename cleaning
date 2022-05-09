@@ -61,3 +61,7 @@ dli_afdw <- rbind(strain_afdw, strain_weather_hundreth) %>%
   na.omit((dli_afdw))
 dli_asp <- rbind(strain_asp, strain_weather_quarter) %>%
   na.omit((dli_asp))
+asp_po4 <- rbind(strain_asp, strain_po4) %>%
+  na.omit((asp_po4))
+asp_nh4 <- rbind(strain_asp, strain_nh4) %>%
+  na.omit((asp_nh4))
