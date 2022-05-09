@@ -5,9 +5,6 @@ library(tidyverse)
 
 # Importing, formatting, and cleaning data from OpenEI DISCOVR page 
 # https://apps.openei.org/DISCOVR/#summaryTables
-
-# Weather from August 26, 2019 through October 31, 2020
-# Growth Data from August 26, 2019 through October 30, 2020
 the_weather <- read.csv(file = "https://data.openei.org/files/5693/DISCOVR_SOT_weather_2020.csv")
 the_data <- read_csv(file = "https://data.openei.org/files/5693/DISCOVR_SOT_cultivation-composition_2020.csv")
 
