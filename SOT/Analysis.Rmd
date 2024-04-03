@@ -1,0 +1,283 @@
+---
+title: "DISCOVR SOT Analysis"
+author: Paige Norris, NREL, May 2022
+output: html_document
+---
+
+```{r, echo = FALSE, message=FALSE}
+# Author: Paige Norris
+# Date: May 2022
+# Goal: Create interactive graphs from composition and cultivation data formatted in 
+# DISCOVR_data_clean.R
+
+# Takes user input and creates an interactive HTML with graphs pertaining to growth
+# trends of specfic algae strain(s) over a set period of time. Works in tandem with 
+# DISCVOR_data_clean.R. 
+```
+
+```{r, echo = FALSE, message=FALSE}
+library(usethis)
+library(devtools)
+# USER INPUT: Enter the dates of the time period you would like to look at in form YYYY-MM-DD
+start_date = "2020-05-01"
+end_date = "2020-07-31"
+
+# USER INPUT: Enter desired algae strain, needs to match file name perfectly
+strain = "P.celeri"
+
+# NOTE: THE BELOW FILE IS PULLED FROM PAIGE NORRIS'S (paigeanorris@gmail.com) GITHUB 
+# DUE TO THE PRIVATE SETTING ON THE NREL-ALGAE TEAM REPO
+source_url("https://raw.githubusercontent.com/paiyge/DISCOVR/main/cleaning")
+```
+
+### All variables plotted against time in days
+
+```{r, echo = FALSE, message=FALSE}
+library(ggplot2)
+plot1 <- ggplot(all_variable) +
+           aes(x = DateTime, y = Value, fill = Variable, colour = PondID) +
+           geom_line(size = 0.5) +
+           theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+           scale_fill_hue(direction = 1) +
+           scale_color_hue(direction = 1) +
+           labs(x = "DateTime", y = "Value", fill = "Variable", color = "PondID") +
+           theme_minimal()
+```
+
+```{r, echo = FALSE, message=FALSE}
+library(plotly)
+ggplotly(plot1)
+
+```
+
+### All variables plotted against time in days, by pond
+
+```{r, echo = FALSE, message=FALSE}
+library(ggplot2)
+plot2 <- ggplot(all_variable) +
+           aes(x = DateTime, y = Value, fill = Variable) +
+           geom_line(size = 0.5, colour = "#112446") +
+           scale_fill_hue(direction = 1) +
+           labs(x = "DateTime", y = "Value", fill = "Variable") +
+           theme_minimal() +
+           facet_wrap(vars(PondID))
+```
+
+```{r, echo = FALSE, message=FALSE}
+library(plotly)
+ggplotly(plot2)
+
+```
+
+### All variables plotted against time in days, by variable
+
+```{r, echo = FALSE, message=FALSE}
+library(ggplot2)
+### Facets by ponds, color = variable
+plot3 <- ggplot(all_variable) +
+           aes(x = DateTime, y = Value, colour = Variable) +
+           geom_line(size = 0.5) +
+           scale_color_hue(direction = 1) +
+           labs(x = "DateTime", y = "Value", color = "PondID") +
+           theme_minimal() +
+           facet_wrap(vars(PondID))
+```
+
+```{r, echo = FALSE, message=FALSE}
+library(plotly)
+ggplotly(plot3)
+
+```
+
+### All variables plotted against time in days, by pond
+
+```{r, echo = FALSE, message=FALSE}
+library(ggplot2)
+plot4 <- ggplot(all_variable) +
+           aes(x = DateTime, y = Value, colour = PondID) +
+           geom_line(size = 0.5) +
+           scale_color_hue(direction = 1) +
+           theme_minimal() +
+           facet_wrap(vars(Variable), scales = "free")
+```
+
+```{r, echo = FALSE, message=FALSE}
+library(plotly)
+ggplotly(plot4)
+
+```
+
+### AFDW over time
+
+```{r, echo = FALSE, message=FALSE}
+library(ggplot2)
+plot5 <- ggplotly(ggplot(strain_afdw) +
+           aes(x = DateTime, y = Value, colour = PondID) +
+           geom_point(shape = "circle", size = 1.5) +
+           geom_line() +
+           scale_color_hue(direction = 1) +
+           theme_minimal() +
+           facet_wrap(vars(Variable)))
+```
+
+```{r, echo = FALSE, message=FALSE}
+library(plotly)
+ggplotly(plot5)
+
+```
+
+
+### AFDW over time
+```{r, echo = FALSE, message=FALSE}
+library(ggplot2)
+plot6 <- ggplotly(ggplot(strain_afdw) +
+           aes(x = DateTime, y = Value, colour = PondID) +
+           geom_line(size = 0.5) +
+           scale_color_hue(direction = 1) +
+           theme_minimal() +
+           facet_wrap(vars(Variable)))
+```
+
+```{r, echo = FALSE, message=FALSE}
+library(plotly)
+ggplotly(plot6)
+
+```
+
+### AFDW with DLI over time
+
+```{r, echo = FALSE, message=FALSE}
+library(ggplot2)
+plot7 <- ggplotly(ggplot(dli_afdw) +
+           aes(x = DateTime, y = Value, colour = PondID) +
+           geom_point() +
+           geom_line(size = 0.5) +
+           scale_color_hue(direction = 1) +
+           theme_minimal())
+```
+
+```{r, echo = FALSE, message=FALSE}
+library(plotly)
+ggplotly(plot7)
+
+```
+
+### DLI with slope productivity
+
+```{r, echo = FALSE, message=FALSE}
+library(ggplot2)
+plot8 <- ggplotly(ggplot(dli_asp) +
+  aes(x = DateTime, y = Value, colour = PondID) +
+  geom_line(size = 0.5) +
+  scale_color_hue(direction = 1) +
+  theme_minimal())
+```
+
+```{r, echo = FALSE, message=FALSE}
+library(plotly)
+ggplotly(plot8)
+
+```
+
+### AFDW vs Date facets by ponds
+```{r, echo = FALSE, message=FALSE}
+library(ggplot2)
+plot9 <- ggplotly(ggplot(strain_data) +
+           aes(x = DateTime, y = AFDW.AVE, colour = PondID) +
+           geom_line(size = 0.5) +
+           scale_color_hue(direction = 1) +
+           theme_minimal() +
+           facet_wrap(vars(PondID)))
+```
+           
+```{r, echo = FALSE, message=FALSE}
+library(plotly)
+ggplotly(plot9)
+```
+
+### Growth, Composition, and DLI over time for FY 2020
+```{r, echo = FALSE, message=FALSE}
+library(ggplot2)
+plot10 <- ggplotly(ggplot(all_variable) +
+  aes(x = DateTime, y = Value, fill = Variable, colour = PondID) +
+  geom_line(size = 0.5) +
+  scale_fill_hue(direction = 1) +
+  scale_color_hue(direction = 1) +
+  labs(title = "Growth, Composition, and DLI over time for FY 2020", 
+       subtitle = "AFDW, ASP, NH4, PO4", fill = "all_variable$variable") +
+  theme_minimal())
+```
+ 
+
+```{r, echo = FALSE, message=FALSE}
+library(plotly)
+ggplotly(plot10)
+```
+
+### Growth, Composition, and DLI over time
+```{r, echo = FALSE, message=FALSE}
+library(ggplot2)
+plot11 <- ggplotly(ggplot(all_variable) +
+  aes(x = DateTime, y = Value, fill = Variable, colour = PondID) +
+  geom_line(size = 0.5) +
+  scale_fill_hue(direction = 1) +
+  scale_color_hue(direction = 1) +
+  labs(title = "Growth, Composition, and DLI over time for FY 2020", 
+       subtitle = "AFDW, ASP, NH4, PO4", fill = "all_variable$variable") +
+  theme_minimal())
+```
+
+```{r, echo = FALSE, message=FALSE}
+library(plotly)
+ggplotly(plot11)
+```
+
+# DLI and Slope Productivity over time
+```{r, echo = FALSE, message=FALSE}
+library(ggplot2)
+plot12 <- ggplotly(ggplot(dli_asp) +
+  aes(x = DateTime, y = Value, fill = Variable, colour = PondID) +
+  geom_line(size = 0.5) +
+  scale_fill_hue(direction = 1) +
+  scale_color_hue(direction = 1) +
+  labs(title = "Growth, Composition, and DLI over time for FY 2020", 
+       subtitle = "AFDW, ASP, NH4, PO4", fill = "all_variable$variable") +
+  theme_minimal())
+```
+  
+```{r, echo = FALSE, message=FALSE}
+library(plotly)
+ggplotly(plot12)
+```
+### Slope Productivity and NH4 over time
+```{r, echo = FALSE, message=FALSE}
+library(ggplot2)
+plot13 <- ggplotly(ggplot(asp_nh4) +
+ aes(x = DateTime, y = Value, fill = Variable, colour = PondID) +
+ geom_line(size = 0.5) +
+ scale_fill_hue(direction = 1) +
+ scale_color_hue(direction = 1) +
+ labs(x = "Date", y = "Value", title = "Slope Productivity and NH4 over time") +
+ theme_minimal())
+```
+  
+```{r, echo = FALSE, message=FALSE}
+library(plotly)
+ggplotly(plot13)
+```
+
+```{r, echo = FALSE, message=FALSE}
+library(ggplot2)
+plot14 <- ggplotly(ggplot(asp_po4) +
+ aes(x = DateTime, y = Value, fill = Variable, colour = PondID) +
+ geom_line(size = 0.5) +
+ scale_fill_hue(direction = 1) +
+ scale_color_hue(direction = 1) +
+ labs(x = "Date", y = "Value", title = "Slope productivity and PO4 over time") +
+ theme_minimal())
+```
+  
+```{r, echo = FALSE, message=FALSE}
+library(plotly)
+ggplotly(plot14)
+```
