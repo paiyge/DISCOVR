@@ -1,0 +1,598 @@
+# reads in the list of experiments and basic format of the cultivation sheets from ASU and
+# compiles it into 3 files, cultivation data, ysi (pond water chemistry), and weather 
+# works of a key file which contains the filename and formats of the to be scraped sheets
+# based off code written by Ed Wolfrum and Eric Knoshaug a few years earlier for the ATP3 project
+# additions and adaptations were done by Madeline Lane up to July 2021
+# further modifications done by Eric Knoshaug as follows:
+# general order was changed to read in harvest ops first because this is the data that most folks will be interested in so want this data to appear in the first set of columns
+# POC: Eric Knoshaug 
+
+library(readxl)
+
+# Set working direction to folder containing "DISCOVR_SOT_Experiement_List.xlsx"
+setwd("~/Desktop/R")
+
+# read in the master file containing the list of SOT spreadsheets and versions to read in and munge
+theFiles  <- read_excel("DISCOVR_SOT_Experiment List_Paige.xlsx", sheet=1,skip=0)
+
+# drop to only those files that need to be scraped or re-scraped
+# this requires that File.Read is updated in "DISCOVR_SOT_Experiment List.xlsx"
+theFiles  <- subset(theFiles, theFiles$File.Read == TRUE)
+
+# checks for existing file from the same day and removes and replaces while keeping older files
+# if re-doing scrapes multiple times in one day, do this every time
+# this is the file name for the temporary scrape output files
+{  HOFout       <- paste("tmpHO.",Sys.Date(),".csv",sep="")
+ if (file.exists(HOFout)){ file.remove(HOFout) }
+  
+AFDWFout     <- paste("tmpAFDW.",Sys.Date(),".csv",sep="")
+ if (file.exists(AFDWFout)){ file.remove(AFDWFout) }
+  
+ODFout       <- paste("tmpOD.",Sys.Date(),".csv",sep="")
+ if (file.exists(ODFout)){ file.remove(ODFout) }
+
+DNDTFout     <- paste("tmpDNDT.",Sys.Date(),".csv",sep="")
+ if (file.exists(DNDTFout)){ file.remove(DNDTFout) }
+  
+ActivityFout <- paste("tmpActvity.",Sys.Date(),".csv",sep="")
+ if (file.exists(ActivityFout)){ file.remove(ActivityFout) }
+}
+
+# loops through all toREAD files and builds Harvest Ops (HO), AFDW, OD, DNDT, and Activity .xlsx files  
+for (j in 1:dim(theFiles)[1])
+  {
+    cat("j= ", j, "\n")
+    toREADHO  <-theFiles$File.Read[j] & theFiles$Harvest.Read[j]   	 # BOOLEAN - read this workbook page?
+    print("Harvest Ops")
+    cat("toREADHO= ", toREADHO)
+    if(toREADHO==TRUE)
+    {
+    FN     <-theFiles$FileName[j]									                   # spreadsheet file name to read
+    print(FN)
+    SRHO      <-theFiles$Harvest.StartRow[j]			                   # start row 
+    print(SRHO)
+    SCHO      <-theFiles$Harvest.StartCol[j]								         # start column
+    print(SCHO) 
+    verHO     <-theFiles$Harvest.Format[j]								           # format of the worksheet to be read
+    ECHO    	 <-theFiles$Harvest.EndCol[j]                          # end column
+    ERHO       <- NA                                                 # end row. NA so reads in all rows with data
+    SNHO       <-theFiles$Harvest.SheetNum[j]                        # sheet number
+    print(SNHO)
+   
+    tmpHOSE             <- read_excel(FN,sheet = SNHO, range = cell_limits(c(SRHO,SCHO), c(ERHO,ECHO)),  col_names = TRUE, .name_repair = "minimal", col_types = "text")
+    tmpHOSE$SOT.Season  <- theFiles$Season[j]
+    tmpHOSE$SOT.Year    <- theFiles$SOT.Year[j]
+    HO                  <- tmpHOSE[,c('SiteID', 'SOT.Year', 'SOT.Season', 'ExperimentID', 'StrainID', 'DateTime','Experiment Duration (Days)', 'TreatmentID', 'PondID','Harvest Number','Days Between Harvest (days)', 'Depth at sampling (cm)','Pond Depth After Harvest (cm)','Estimated Volume Harvested (L)','Concentration at Harvest (g/L AFDW)','Estimated Biomass Harvested (g)','% Volume Harvested','% Change in OD after Harvest','% Change in AFDW after Harvest','Pond Crash','Please use this column to note what is happening in the ponds from a harvest and/or contamination perspective','AHYP all ponds','AHYP-H2H  all ponds')]
+    HO$DateTime         <- as.POSIXct(as.numeric(HO[["DateTime"]]) * (60*60*24), origin="1899-12-30", tz="GMT")
+    HO                  <- subset(HO, !is.na(HO$DateTime))
+# add in to drop levels if no duration per event.....    
+    
+    HO[is.na(HO)]       <- ""
+    expID               <- unique(HO$ExperimentID)  # set global identifier theExp (ExperimentID) for use in the activity log scrape
+   
+    write.table(HO, HOFout, sep=",", append=TRUE, row.names =FALSE, col.names = TRUE)
+    }
+  
+    toREADAFDW  <- theFiles$File.Read[j] & theFiles$AFDW.Read[j]   	 # BOOLEAN - read this workbook page?
+    print("AFDW")
+    cat("toREADAFDW= ", toREADAFDW)
+    if(toREADAFDW==TRUE)                                             # checks if key says to read this sheet or not (must have key up to date)
+    {
+      print(FN)
+      SRAFDW      <- theFiles$AFDW.StartRow[j]			              		 # start row 
+      
+      SCAFDW      <- theFiles$AFDW.StartCol[j]								         # start column
+      
+      verAFDW     <- theFiles$AFDW.Format[j]								           # format of the worksheet to be read
+      
+      ECAFDW    	<- theFiles$AFDW.EndCol[j]                          # end columns
+      cat("ECAFDW =", ECAFDW)
+      ERAFDW      <- NA                                              # end row. NA so reads in all rows with data
+       
+      SNAFDW      <- theFiles$AFDW.SheetNum[j]                        # sheet number
+      
+      tmpAFDW             <- read_excel(FN,SNAFDW, range = cell_limits(c(SRAFDW,SCAFDW), c(ERAFDW,ECAFDW)), .name_repair = "minimal", col_types = "text" )
+      tmpAFDW$DateTime    <- as.POSIXct(as.numeric(tmpAFDW[["DateTime"]]) * (60*60*24), origin="1899-12-30", tz="GMT")
+      tmpAFDW             <- subset(tmpAFDW, !is.na(tmpAFDW$DateTime))
+      AFDW                <- tmpAFDW[,c('DateTime','PondID','DW-AVE','DW-STDEV','DW-%RSD','AFDW-AVE','AFDW-STDEV','AFDW-%RSD','%ASH-AVE','ASP        all ponds')]
+      AFDW[is.na(AFDW)]   <- ""
+      write.table(AFDW, AFDWFout, sep=",", append=TRUE, row.names =FALSE, col.names = TRUE)
+    }
+    
+      toREADOD  <-theFiles$File.Read[j] & theFiles$OD.Read[j]   	 # BOOLEAN - read this workbook page?
+      cat("toREADOD= ", toREADOD)
+      if(toREADOD==TRUE)
+        {
+        print(FN)
+        SROD      <-theFiles$OD.StartRow[j]			              		 #start row 
+        print(SROD)
+        SCOD      <-theFiles$OD.StartCol[j]								         #start column
+        print(SCOD)
+        verOD     <-theFiles$OD.Format[j]								           #format of the worksheet to be read
+        print(verOD)
+        ECOD    	 <-theFiles$OD.EndCol[j]                        #end column
+        print(ECOD)
+        EROD       <- NA                                        #end row. NA so reads in all rows with data
+        print(EROD)
+        SNOD       <-theFiles$OD.SheetNum[j]                         #sheet number
+        
+        tmpOD           <-read_excel(FN,sheet = SNOD, range = cell_limits(c(SROD,SCOD), c(EROD,ECOD)) , .name_repair = "minimal", col_types = "text" )
+        tmpOD$DateTime  <- as.POSIXct(as.numeric(tmpOD[["DateTime"]]) * (60*60*24), origin="1899-12-30", tz="GMT")
+        tmpOD           <-subset(tmpOD,!is.na(tmpOD$DateTime))
+        OD              <-tmpOD[,c("DateTime",'PondID','OD750-AVE','OD750-%RSD','OD680-AVE','OD680-%RSD','OD750-680 ratio')]
+        OD[is.na(OD)]   <- ""
+        
+        write.table(OD, ODFout, sep=",", append=TRUE, row.names =FALSE, col.names = TRUE)
+    }
+  
+   toREADDNDT  <-theFiles$File.Read[j] & theFiles$DNDT.Read[j]   	 # BOOLEAN - read this workbook page?
+      print(toREADDNDT)
+      if(toREADDNDT==TRUE)
+      {
+        print(FN)
+        SRDNDT      <-theFiles$DNDT.StartRow[j]			              		 #start row 
+        print(SRDNDT)
+        SCDNDT      <-theFiles$DNDT.StartCol[j]								         #start column
+        print(SCDNDT)
+        verDNDT     <-theFiles$DNDT.Format[j]								           #format of the worksheet to be read
+        print(verDNDT)
+        ECDNDT    	 <-theFiles$DNDT.EndCol[j]                        #end column
+        print(ECDNDT)
+        ERDNDT       <- NA                                        #end row. NA so reads in all rows with data
+        print(ERDNDT)
+        SNDNDT       <-theFiles$DNDT.SheetNum[j]                         #sheet number
+       
+        tmpDNDT<-read_excel(FN,sheet = SNDNDT, range = cell_limits(c(SRDNDT,SCDNDT), c(ERDNDT,ECDNDT)), .name_repair = "minimal", col_types = "text" )
+      
+        tmpDNDT$DateTime<- as.POSIXct(as.numeric(tmpDNDT[["DateTime"]]) * (60*60*24), origin="1899-12-30", tz="GMT")
+        tmpDNDT<-subset(tmpDNDT,!is.na(tmpDNDT$DateTime))
+        NO3     <-data.frame("DateTime"=tmpDNDT$DateTime, "PondID"=tmpDNDT$PondID)
+        
+        DNDT<-tmpDNDT[,c('DateTime', 'PondID', 'Week of Year', 'Event', 'Duration per Event (Days)', 'TrackingID','AnalyticalID','freeze dried biomass for analytical (g)', 'NH4-AVE','NH4-STDEV','NH4-%RSD', 'pH','Salinity (g/L)','Pond Temp (C)', 'PO4-AVE','PO4-STDEV','PO4-%RSD','N:P ratio', 'Depth (cm)', 'Daily Evaporation')]
+        
+       if("NO3-%RSD" %in% colnames(tmpDNDT))
+        {
+         NO3$NO3.RSD   <-tmpDNDT$`NO3-%RSD`
+         NO3$NO3.AVE   <-tmpDNDT$`NO3-AVE`
+         NO3$NO3.STDEV <-tmpDNDT$`NO3-STDEV`
+         } else {
+              NO3$NO3.RSD   <- ""
+              NO3$NO3.AVE   <- ""
+              NO3$NO3.STDEV <- ""
+             }
+        
+       DNDT.NO                   <- merge(DNDT, NO3, by = c('DateTime', 'PondID'))
+       DNDT.NO[is.na(DNDT.NO)]   <- ""
+       
+       write.table(DNDT.NO, DNDTFout, sep=",", append=TRUE, row.names =FALSE, col.names = TRUE)
+     }
+  
+  toREADActivity     <-theFiles$File.Read[j] & theFiles$Activity.Read[j]   	 # BOOLEAN - read this workbook page?
+  print(toREADActivity)
+  if(toREADActivity==TRUE)
+  {
+    SRActivity      <-theFiles$Activity.StartRow[j]			              		 # start row 
+    print(SRActivity)
+    SCActivity      <-theFiles$Activity.StartCol[j]								         # start column
+    print(SCActivity)
+    verActivity     <-theFiles$Activity.Format[j]								           # format of the worksheet to be read
+    print(verActivity)
+    ECActivity    	 <-theFiles$Activity.EndCol[j]                         # end column
+    print(ECActivity)
+    ERActivity       <- NA                                                 # end row. NA so reads in all rows with data
+    print(ERActivity)
+    SNActivity       <-theFiles$Activity.SheetNum[j]                       # sheet number
+    print(SNActivity)
+   
+    tmpActivity                   <-read_excel(FN, SNActivity, col_names = TRUE, range = cell_limits(c(SRActivity,SCActivity), c(ERActivity,ECActivity)), .name_repair = "minimal", col_types = "text" )
+    tmpActivity$`DateTime`        <-as.POSIXct(as.numeric(tmpActivity[["Date Time"]]) * (60*60*24), origin="1899-12-30", tz="GMT")
+    tmpActivity                   <-tmpActivity[-c(1)]
+    tmpActivity$ExperimentID      <-expID
+    
+    write.table(tmpActivity, ActivityFout, sep=",", append=TRUE, row.names =FALSE, col.names = TRUE)
+  }}
+
+# read complete tables back in and merge into one sheet having all cultivation data
+{ 
+  HO_in    <- read.csv(HOFout, stringsAsFactors = FALSE)
+HO_in$DateTime   <-as.POSIXct(HO_in$DateTime, format= "%Y-%m-%d %H:%M:%S")
+HO_in      <- subset(HO_in, !is.na(HO_in$DateTime))
+
+AFDW_in  <- read.csv(AFDWFout, stringsAsFactors = FALSE)
+AFDW_in$DateTime  <- as.POSIXct(AFDW_in$DateTime, format= "%Y-%m-%d %H:%M:%S")
+AFDW_in      <- subset(AFDW_in, !is.na(AFDW_in$DateTime))
+
+OD_in    <- read.csv(ODFout, stringsAsFactors = FALSE)
+OD_in$DateTime  <- as.POSIXct(OD_in$DateTime, format= "%Y-%m-%d %H:%M:%S")
+OD_in      <- subset(OD_in, !is.na(OD_in$DateTime))
+
+DNDT_in    <- read.csv(DNDTFout, stringsAsFactors = FALSE)
+DNDT_in$DateTime  <- as.POSIXct(DNDT_in$DateTime, format= "%Y-%m-%d %H:%M:%S")
+DNDT_in      <- subset(DNDT_in, !is.na(DNDT_in$DateTime))
+
+HO_AFDW      <- merge(HO_in, AFDW_in, by = c('DateTime', 'PondID'))
+HO_AFDW_OD   <- merge(HO_AFDW, OD_in, by = c('DateTime', 'PondID'))
+cultivation_data    <- merge(HO_AFDW_OD, DNDT_in, by = c('DateTime', 'PondID'))
+
+names(cultivation_data)[names(cultivation_data) == "X..Volume.Harvested"]    <- "% Volume Harvested"
+names(cultivation_data)[names(cultivation_data) == "X..Change.in.OD.after.Harvest"]    <- "% Change in OD after Harvest"
+names(cultivation_data)[names(cultivation_data) == "X..Change.in.AFDW.after.Harvest"]    <- "% Change in AFDW after Harvest"
+names(cultivation_data)[names(cultivation_data) == "X.ASH.AVE"]    <- "% ASH-AVE"
+
+CultFout       <- paste("Cultivation Data.",Sys.Date(),".csv",sep="")
+if (file.exists(CultFout)){ file.remove(CultFout) }
+
+write.csv(cultivation_data,CultFout, row.names = FALSE)
+}
+
+#This for loop is a little different as its pulling from YSI which has a larger data set
+#and requires a new data frame be created in the end to merge the multi pond data
+
+YSIFout       <- paste("YSI.",Sys.Date(),".csv",sep="")
+if (file.exists(YSIFout)){ file.remove(YSIFout)      }
+
+for(j in 1:dim(theFiles)[1]) 
+{
+  toREADYSI  <-theFiles$File.Read[j] & theFiles$YSI.Read[j]   	 # BOOLEAN - read this workbook page?
+  print(toREADYSI)
+  if(toREADYSI==TRUE){
+    
+    FNYSI     <-theFiles$FileName[j]									         #spreadsheet file name to read
+    print(FNYSI)
+    SRYSI      <-theFiles$YSI.StartRow[j]			              		 #start row 
+    print(SRYSI)
+    SCYSI      <-theFiles$YSI.StartCol[j]								         #start column
+    print(SCYSI)
+    verYSI     <-theFiles$YSI.Format[j]								           #format of the worksheet to be read
+    print(verYSI)
+    ECYSI    	 <-theFiles$YSI.EndCol[j]                       #end column
+    print(ECYSI)
+    ERYSI       <- NA                                        #end row. NA so reads in all rows with data
+    print(ERYSI)
+    SNYSI       <-theFiles$YSI.SheetNum[j]                         #sheet number
+   
+    tmpYSI     <-read_excel(FNYSI,sheet = SNYSI, range = cell_limits(c(SRYSI,SCYSI), c(ERYSI,ECYSI)), .name_repair = "minimal", col_types = "text" )
+    
+   strainID  <-read_excel(FNYSI,sheet = 3, range = cell_limits(c(35,1),c(NA,5)), .name_repair = "minimal", col_types = "text" )
+    
+    ################################################################################################
+    # this section takes the 6 seperate pond datasets and combines them into one single dataframe with 10 variables
+    # first 6 seperate data frames are created, each containing the 10 variables: PondID, DATETIME, pH, ORP, Temperture, Conductivity, Dissolved Oxygen, Salinity, PAR
+    # Then the DF are rBinded into comboYSI
+    # Then a subset is made of the rows which do not contain NA in the DATETIME column
+    
+    DF1<-tmpYSI[3:12]
+    DF1$ExperimentID<-tmpYSI$ExperimentID
+    DF1$SiteID<-tmpYSI$SiteID
+    DF1$StrainID<-strainID$StrainID[1]
+    
+    DF2<-tmpYSI[13:22]
+    DF2$ExperimentID<-tmpYSI$ExperimentID
+    DF2$SiteID<-tmpYSI$SiteID
+    DF2$StrainID<-strainID$StrainID[1]
+    
+    DF3<-tmpYSI[23:32]
+    DF3$ExperimentID<-tmpYSI$ExperimentID
+    DF3$SiteID<-tmpYSI$SiteID
+    DF3$StrainID<-strainID$StrainID[1]
+    
+    DF4<-tmpYSI[33:42]
+    DF4$ExperimentID<-tmpYSI$ExperimentID
+    DF4$SiteID<-tmpYSI$SiteID
+    DF4$StrainID<-strainID$StrainID[1]
+    
+    DF5<-tmpYSI[43:52]
+    DF5$ExperimentID<-tmpYSI$ExperimentID
+    DF5$SiteID<-tmpYSI$SiteID
+    DF5$StrainID<-strainID$StrainID[1]
+    
+    DF6<-tmpYSI[53:62]
+    DF6$ExperimentID<-tmpYSI$ExperimentID
+    DF6$SiteID<-tmpYSI$SiteID
+    DF6$StrainID<-strainID$StrainID[1]
+    
+    comboYSI<-rbind(DF1,DF2,DF3,DF4,DF5,DF6)
+    comboYSI<-subset(comboYSI, !is.na(DATETIME))
+    comboYSI$DATETIME<- as.POSIXct(as.numeric(comboYSI[["DATETIME"]]) * (60*60*24), origin="1899-12-30", tz="GMT")
+    
+    comboYSI<-subset(comboYSI, !is.na(ExperimentID))
+    
+    k <-comboYSI[c("SiteID","ExperimentID","StrainID","PondID","DATETIME",
+                  "pH","ORP           (mV)","Temperature (oC)",
+                  "Conductivity  (mS/cm)","Dissolved Oxygen  (mg/L)",
+                  "Oxygen Sat%","Salinity (g/L)","PAR  (umol photons/m2 s)"
+    )]
+    
+    ParProbs<-data.frame("DATETIME"=comboYSI$DATETIME,"PAR  (umol photons/m2 s)"=comboYSI$`PAR  (umol photons/m2 s)`) # not sure why this is needed....
+    
+    ######################
+    #write out table
+    
+    write.table(ParProbs,"parprobs.csv", sep=",",append = TRUE, row.names = FALSE, col.names = TRUE)
+    write.table(k, YSIFout, sep=",", append=TRUE, row.names =FALSE, col.names = TRUE)
+    }
+}
+
+# weather
+
+WFout<- paste("Weather.",Sys.Date(),".csv",sep="")
+if (file.exists(WFout)){ file.remove(WFout)      }
+
+for (j in 1:dim(theFiles)[1])
+{
+  print("this is j ") 
+  print(j)
+  toREADW  <-theFiles$File.Read[j] & theFiles$W.Read[j]   	 # BOOLEAN - read this workbook page?
+  print(toREADW)
+  if(toREADW==TRUE){
+   
+    FNW     <-theFiles$FileName[j]									         #spreadsheet file name to read
+    print(FNW)
+    SRW      <-theFiles$W.StartRow[j]			              		 #start row 
+    print(SRW)
+    SCW      <-theFiles$W.StartCol[j]								         #start column
+    print(SCW)
+    verW     <-theFiles$W.Format[j]								           #format of the worksheet to be read
+    print(verW)
+    ECW    	 <-NA                          #end column
+    print(ECW)
+    ERW       <- NA                                           #end row. NA so reads in all rows with data
+    SNW       <-theFiles$W.SheetNum[j]                         #sheet number
+    print(SNW)
+    tmpW<- read_excel(FNW,sheet = SNW, range = cell_limits(c(SRW,SCW), c(ERW,ECW)))
+    
+    strainID  <-read_excel(FNW,sheet = 3, range = cell_limits(c(35,1),c(NA,5)), .name_repair = "minimal", col_types = "text" )
+    tmpW$StrainID<-strainID$StrainID[1]
+    
+    TroubleMakers<-data.frame("Precip","wdsp","WDDIR","Datetime"=tmpW$DATETIME)
+    if("PRECIP (mm)" %in% colnames(tmpW ))
+    {
+      TroubleMakers$Precip<-tmpW$`PRECIP (mm)`
+      cat("Yep, it's in there!\n");
+    } else{TroubleMakers$Precip<-(as.numeric(tmpW$`PRECIP (cm)`*10))
+    print("its not here")}
+    
+    if("WDSPD (m/s)" %in% colnames(tmpW ))
+    {
+      TroubleMakers$X.wdsp.<-tmpW$`WDSPD (m/s)`
+      cat("Yep, it's in there!\n");
+    } else{TroubleMakers$X.wdsp.<-(as.numeric((tmpW$`WDSPD (km/hr)`*1000)/3600))
+    print("its not here")}
+    
+    Weather<-tmpW[c("SiteID",
+                    "ExperimentID", 
+                    "StrainID",
+                    "DATETIME",
+                    "AIRTEMP (oC)",
+                    "HUMID (RH %)",
+                    "Global Light Energy  (W/m2)",
+                    "WDDIR (degrees)",
+                    "HOBO PAR"
+                    #note there are some issues with standardization of weather data cols names
+    )]
+    
+    Weather$"PRECIP (mm)"=TroubleMakers$Precip 
+    Weather$"WDSPD (m/s)"=TroubleMakers$X.wdsp.
+    Weather$"Year"=theFiles$Year[j]
+    
+    
+    Weather <- Weather[Weather$ExperimentID!="ExperimentID",]
+    Weather <- subset(Weather, !is.na(Weather$DATETIME))
+    
+    write.table(Weather, WFout, sep=",", append=TRUE, row.names =FALSE, col.names = TRUE)
+    
+  }}
+
+finalWeather<-read.csv(WFout)
+
+Finalparprobs<-read.csv("parprobs.csv",sep = ',')
+
+finalWeather<-merge(finalWeather,Finalparprobs, by.x = "DATETIME") #changed by.x=TRUE to by.x=DATETIME
+
+finalWeather<-finalWeather[finalWeather$ExperimentID!="ExperimentID",]
+Weather18<-finalWeather[finalWeather$Year== "2018",]
+#removes repeats of column headers 
+write.table(Weather18,"CompleteWeather2018.csv",sep=",", append=TRUE, row.names =FALSE, col.names = TRUE)
+
+Weather19<-finalWeather[finalWeather$Year== "2019",]
+#removes repeats of column headers 
+write.table(Weather19,"CompleteWeather2019.csv",sep=",", append=TRUE, row.names =FALSE, col.names = TRUE)
+
+Weather20<-finalWeather[finalWeather$Year== "2020",]
+#removes repeats of column headers 
+write.table(Weather20,"CompleteWeather2020.csv",sep=",", append=TRUE, row.names =FALSE, col.names = TRUE)
+
+###################################################################################
+###start of final file formatting
+
+######Merge in Analytical Data
+
+# theComp  <- read_excel("UNEDITED_ASUALLDATA_EK.xlsx", sheet=1,skip=0) # if needed for future comp results
+
+# drop to only those files that need to be scraped or re-scraped
+# this requires that File.Read is updated in "DISCOVR_SOT_Experiment List.xlsx"
+
+theComp   <-read.csv("FY20_SOT_Composition_Full_20211117.csv", sep = ",")
+theComp  <- subset(theComp, theComp$AnalyticalID != "")
+
+theCult  <- read.csv("Cultivation Data.2021-11-17.csv", stringsAsFactors = FALSE)
+theCult  <- theCult[-c(42)]
+
+Cult_Comp  <- merge(theCult, theComp, all.x = TRUE, by = "AnalyticalID")
+
+# drop those with no ExperimentID
+Cult_Comp  <- subset(Cult_Comp, Cult_Comp$ExperimentID != "")
+
+write.csv(Cult_Comp, "Cult_CompFout.csv", row.names = FALSE)
+#manually rename this to match Cultivation and Composition File naming conventions
+
+## Stopped here 11/17/21
+## The below was unnecessary for completion 
+
+#######Create Final File and reorder columns
+
+# MetaSheet<-read.csv("DISCOVR_SOT_Cultivation_Composition_Complete.csv")
+# MetaSheet$Experiment_Year<-year(MetaSheet$DateTime)
+
+# G<-data.frame("SiteID"=MetaSheet$SiteID,
+#               "ExperimentID"=MetaSheet$ExperimentID,
+#               #"Experiment Year"=MetaSheet$Experiment_Year,
+#               "Year"=MetaSheet$Year,
+#               "Season"=MetaSheet$Season,
+#               "StrainID"= MetaSheet$StrainID,
+#               "PondID"=MetaSheet$PondID,
+#               "TreatmentID"=MetaSheet$TreatmentID,
+#               "DateTime"=MetaSheet$DateTime,
+#               "Activity"=MetaSheet$Activity,
+#               "Week of Year"=MetaSheet$Week.of.Year,
+#               "Experiment.Duration.Days"=MetaSheet$Experiment.Duration..Days.,
+#               "Event"=MetaSheet$Event,
+#               "Duration Per Event Days"=MetaSheet$Duration.per.Event..Days.,
+#               "Depth cm"=MetaSheet$Depth..cm.,
+#               "Daily Evaporation"=NA,
+#               "Depth at Sampling cm"=MetaSheet$Depth.at.sampling..cm.,
+#               "Harvest Number"=MetaSheet$Harvest.Number,
+#               "Days Between Harvest Days"= NA,
+#               "Pond Depth After Harvest cm"=MetaSheet$Pond.Depth.After.Harvest..cm.,
+#               "Estimated Volume Harvested Liters"=MetaSheet$Estimated.Volume.Harvested..L.,
+#               "Concentration at Harvest AFDW g/L"=MetaSheet$Concentration.at.Harvest..g.L.AFDW.,
+#               "Estimated Biomass Harvested g"=MetaSheet$Estimated.Biomass.Harvested..g.,
+#               "Volume Harvested"=MetaSheet$X..Volume.Harvested,
+#               "Change in OD After Harvest"=MetaSheet$X..Change.in.OD.after.Harvest,
+#               "Change in AFDW After Harvest"=MetaSheet$X..Change.in.AFDW.after.Harvest,
+#               "Pond Crash"=MetaSheet$Pond.Crash,
+#               "AHYP All Ponds"=MetaSheet$AHYP.all.ponds,
+#               "AHYP H2H All Ponds"=MetaSheet$AHYP.H2H..all.ponds,
+#               "DW AVE"=MetaSheet$DW.AVE,
+#               "DW STDEV"=MetaSheet$DW.STDEV,
+#               "DW RSD"=MetaSheet$DW..RSD,
+#               "AFDW AVE"=MetaSheet$AFDW.AVE,
+#               "AFDW STDEV"=MetaSheet$AFDW.STDEV,
+#               "AFDW RSD"=MetaSheet$AFDW..RSD,
+#               "Ash AVE"=MetaSheet$X.ASH.AVE,
+#               "ASP All Ponds"= MetaSheet$ASP........all.ponds,
+#               "ASP All Ponds 1"=MetaSheet$ASP........all.ponds.1,
+#               "OD750 AVE"=MetaSheet$OD750.AVE,
+#               "OD750 RSD"=MetaSheet$OD750..RSD,
+#               "OD680 AVE"=MetaSheet$OD680.AVE,
+#               "OD680 RSD"=MetaSheet$OD680..RSD,
+#               "OD 750.680 Ratio"=MetaSheet$OD750.680.ratio,
+#               "NH4 AVE"=MetaSheet$NH4.AVE,
+#               "NH4 STDEV"=MetaSheet$NH4.STDEV,
+#               "NH4 %RSD"=MetaSheet$NH4..RSD,
+#               "NO3 AVE"=MetaSheet$NO3.AVE,
+#               "NO3 STDEV"=MetaSheet$NO3.STDEV,
+#               "NO3 %RSD"=MetaSheet$NO3..RSD,
+#               "PO4 AVE"=MetaSheet$PO4.AVE,
+#               "PO4 STDEV"=MetaSheet$PO4.STDEV,
+#               "PO4 RSD"=MetaSheet$PO4..RSD,
+#               "N:P Ratio"=MetaSheet$N.P.ratio,
+#               "pH"=MetaSheet$pH,
+#               "Salinity g/L"=MetaSheet$Salinity..g.L.,
+#               "Pond Temp C"=MetaSheet$Pond.Temp..C.,
+#               "TrackingID"=MetaSheet$TrackingID,
+#               "AnalyticalID"=MetaSheet$AnalyticalID,
+#               "Freeze Dried Biomass for Analytical g"=MetaSheet$freeze.dried.biomass.for.analytical..g.,
+#               "Notes"=MetaSheet$Please.use.this.column.to.note.what.is.happening.in.the.ponds.from.a.harvest.and.or.contamination.perspective,
+#               #"Composition Shipped to NREL"=MetaSheet$composition.ship.to.nrel,
+#               "Ash"=MetaSheet$ash,
+#               "FAME"=MetaSheet$fame,
+#               "Protein"=MetaSheet$protein,
+#               "Carbohydrates"=MetaSheet$carbs,
+#               "Sum"=MetaSheet$sum,
+#               "Replicates"=MetaSheet$replicates,
+#               "Manitol"=MetaSheet$Manitol,
+#               "Fucose"=MetaSheet$fucose,
+#               "Rhamose"=MetaSheet$rhamnose,
+#               "Galactosamine"=MetaSheet$Galactosamine,
+#               "Arabinose"=MetaSheet$arabinose,
+#               "Glucosamine"=MetaSheet$Glucosamine,
+#               "Galactose"=MetaSheet$galactose,
+#               "Glucose"=MetaSheet$glucose,
+#               "Manose"=MetaSheet$mannose,
+#               "Xylose"=MetaSheet$xylose,
+#               "Ribose"=MetaSheet$ribose,
+#               "Total Carbohydrates"=MetaSheet$total.carbs,
+#               "Total Carbohydrates STDEV"=MetaSheet$total.carbs.stdev,
+#               "Percent Carbon"=MetaSheet$percent.c,
+#               "Percent Hydrogen"=MetaSheet$percent.h,
+#               "Percent Nitrogen"=MetaSheet$percent.n,
+#               "Percent Protein"=MetaSheet$percent.protein,
+#               "Mean FAME"=MetaSheet$mean.fame,
+#               "FAME STDEV"=MetaSheet$fame.stdev,
+#               "FAME RSD"=MetaSheet$fame.rsd,
+#               "Replicate"=MetaSheet$rep,
+#               "C8 0"=MetaSheet$C8_0,
+#               "C10 0"=MetaSheet$C10_0,
+#               "C12 0"=MetaSheet$C12_0,
+#               "C14 0"=MetaSheet$C14_0,
+#               "C14 1"=MetaSheet$C14_1,
+#               "C15 0"=MetaSheet$C15_0,
+#               "C16 0"=MetaSheet$C16_0,
+#               "C16 1 n11"=MetaSheet$C16_1n11,
+#               "C16 1n9"=MetaSheet$C16_1n9,
+#               "C16 1n7"=MetaSheet$C16_1n7,
+#               "C16 1n6"=MetaSheet$C16_1n6,
+#               "C16 n5"=MetaSheet$C16_1n5,
+#               "C16  Unknown"=MetaSheet$C16.unknown.1,
+#               "C16 2"=MetaSheet$C16_2,
+#               "C17 0"=MetaSheet$C17_0,
+#               "C16 3"=MetaSheet$C16_3,
+#               "C16 3"=MetaSheet$C16_3,
+#               "C17 1"=MetaSheet$C17_1,
+#               "C16 4"=MetaSheet$C16_4,
+#               "C18"=MetaSheet$C18,
+#               "C18 1n9"=MetaSheet$C18_1n9,
+#               "C18 1n7"=MetaSheet$C18_1n7,
+#               "c18 2n6"=MetaSheet$C18_2n6,
+#               "C18 3n3"=MetaSheet$C18_3n3,
+#               "C20 0"=MetaSheet$C20_0,
+#               "C20 1"=MetaSheet$C20_1,
+#               "C20 2"=MetaSheet$C20_2,
+#               "C20 3n6"=MetaSheet$C20_3n6,
+#               "C20 4n6"=MetaSheet$C20_4n6,
+#               "C20 3n3"=MetaSheet$C20_3n3,
+#               "C20 5n3"=MetaSheet$C20_5n3,
+#               "C22 0"=MetaSheet$C22_0,
+#               "C22 1n9"=MetaSheet$C22_1n9,
+#               "C22 2"=MetaSheet$C22_2,
+#               "C22 4"=MetaSheet$C22_4,
+#               "C22 5"=MetaSheet$C22_5,
+#               "C24 0"=MetaSheet$C24_0,
+#               "C22 6n3"=MetaSheet$C22_6n3,
+#               "Percent Total Solids"=MetaSheet$percent.total.solids,
+#               "Percent Total Solids STDEV"=MetaSheet$total.solids.stdev,
+#               "Percent Ash"=MetaSheet$percent.ash,
+#               "Percent Ash STDEV"=MetaSheet$ash.stdev,
+#               "Ash Corrected FAME"=MetaSheet$ash.corrected.fame,
+#               "Ash Corrected Protein"=MetaSheet$ash.corrected.protein,
+#               "Ash Corrected Carbohydrates"=MetaSheet$ash.corrected.carbs,
+#               "Ash Corrected Sum"=MetaSheet$ash.corrected.sum,
+#               
+#               stringsAsFactors = FALSE, check.names = FALSE)
+# 
+# twenty17<-G[G$Year=="2017",]
+# #use above line to parse by year
+# 
+# write.csv(twenty17,"DISCOVR_SOT_Cultivation_Composition_2017.csv",sep = ',')
+# 
+# twenty18<-G[G$Year=="2018",]
+# #use above line to parse by year
+# 
+# write.csv(twenty18,"DISCOVR_SOT_Cultivation_Composition_2018 .csv",sep = ',')
+# 
+# twenty19<-G[G$Year=="2019",]
+# #use above line to parse by year
+# 
+# write.csv(twenty19,"DISCOVR_SOT_Cultivation_Composition_2019 .csv",sep = ',')
+# 
+# twenty20<-G[G$Year=="2020",]
+# #use above line to parse by year
+# 
+# write.csv(twenty20,"DISCOVR_SOT_Cultivation_Composition_2020 .csv",sep = ',')
+# 
+# complete<-G[is.na(G$SiteID)==FALSE,]
+# write.csv(complete,"DISCOVR_SOT_Cultivation_Composition_Complete.csv",sep = ',')
+
+# careful!! This will delete everything!
+# rm(list=ls(all=TRUE))
