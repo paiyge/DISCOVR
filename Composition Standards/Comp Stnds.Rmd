@@ -1,0 +1,162 @@
+---
+title: "Compositon Standard"
+author: "Paige Norris - NREL"
+date: "5/9/2022"
+output: html_document
+---
+
+### Oceanium Seaweed samples and derived materials - 
+### Compositional Analysis Report
+
+###### This report documents the compositional analysis of dried algal biomass based on standard analytical procedures to determine the proximate biochemical composition (ash, protein, lipid and total carbohydrate content) of the material. All data is reported as the mean ± standard deviation of triplicate analyses.
+
+#### Material Sourcing and Analysis
+Macroalgae biomass was air dried and packaged at Oceanium, UK, and shipped to the National Renewable Energy Laboratory (NREL), in Golden, Colorado
+
+INSERT TABLE 1: SAMPLE IDENTIFIERS AND SHORT DESIGNAITONS
+
+The biomass was homogenized to <2 mm particle size in the presence of dry ice and analyzed for full proximate composition using established procedures, including methods for total carbohydrates (including uronic acids after acid hydrolysis), lipids, as fatty acid methyl esters (FAME), protein and solids were determined based on previously published procedures: https://www.nrel.gov/bioenergy/microalgae-analysis.html
+Determination of Carbohydrates, Two-step sulfuric acid hydrolysis to hydrolyze the polymeric forms of carbohydrates in algal biomass into monomeric subunits. The monomers are then quantified by either high- performance liquid chromatography, in particular high-performance anion exchange chromatography with pulsed amperometric detection (HPAEC-PAD) [6] Uronic acids were analyzed in the same assay, but analyzed separated by HPAEC-PAD, as a control, alginic acid was included in the reaction and the recovery of the sum of the monomeric detected guluronic and mannuronic acid was 95.58% of the alginic acid dry weight [6]; Determination of Lipids as FAME, Following whole biomass, in situ transesterification of lipids to fatty acid methyl esters (FAME), followed by gas chromatography [8]; Determination of Solids, A convection oven drying procedure is used for total solids content, at 40°C under vacuum, and a dry oxidation method at 575°C for ash content; Determination of Protein, Protein content is determined via elemental nitrogen content and conversion via a 4.92 nitrogen-to-protein factor [4]; Summative Mass Analysis, Integration of LAPs to measure algal biomass constituents in an unambiguous manner and ultimately achieve mass balance closure [7]
+
+```{r, echo = FALSE, message=FALSE}
+library(readxl)
+library(dplyr)
+library(readxl) 
+library(xlsx)
+library(dplyr)
+library(tidyr)
+library(stringr)
+
+filename = "220323_CompositionSummary_Oceanium_LL[1].xlsx"
+
+# Hardcode correction factor for uronic acids
+galacturonic_acid_recovery <- sum(56.88/100)
+guluronic_acid_recovery <- sum(56.77/100)
+glucuronic_acid_recovery <- sum(78.22/100)
+mannuronic_acid_recovery <- sum(76.32/100)
+
+# read in sheets
+sheet_names <- excel_sheets(filename)
+data <- lapply(sheet_names, read_excel, path=filename)
+
+for (sheet in 1:length(sheet_names)){
+  sheet_data <- as.data.frame(data[sheet])
+  #names(sheet_data) <- as.matrix(sheet_data[1,])
+  #sheet_data <- sheet_data[-1, ]
+  sheet_data[] <- lapply(sheet_data, function(x) type.convert(as.character(x)))
+  assign(sheet_names[sheet], sheet_data)}
+# Table 2: Mass fraction values for proximate biomass composition [g/100 g, ± stdev]
+ash_data <- `Solids and Ash`[ , c(1,5,6)] # need to fix column headers to make one line
+ash_data <- ash_data %>% rename("SampleID" = 1, 'ash' = 2, 'ash.stdev' = 3)
+
+carb_data <- Carbohydrates[ , c(1,14,15)]
+# carb_data <- Carbohydrates[ , c("Sample ID', "Carbs*", "Carbs")]
+carb_data <- carb_data %>% rename("SampleID" = 1, 'carbs' = 2, 'carb.stdev' = 3)
+
+fame <- `FAME and Cyclopentane FA`[ , c(1,2,3)]
+# fame <- `FAME and Cyclopentane FA`[ , c("SampleID", "% Total FAME* Mean", "% Total FAME* Std Dev")]
+fame <- fame %>% rename("SampleID" = 1, 'fame' = 2, 'fame.stdev' = 3)
+
+if(exists("Uronics")){
+  no_stdev <-`Compositional Summary`[ , c("Sample.ID", "Uronics....", "Protein...", "Sum..")]
+  no_stdev <- no_stdev %>% rename("SampleID" = 1, "Uronic acids (PAD)" = 2, "Protein (N x 4.92)" = 3, "Mass Closure" = 4)
+} else {
+  no_stdev <-`Compositional Summary`[ , c("Sample ID", "Protein*", "Sum")]
+  no_stdev <- no_stdev %>% rename("SampleID" = 1, "Protein (N x 4.92)" = 2, "Mass Closure" = 3)
+}
+
+# Merging 
+with_stdev <- merge(ash_data, carb_data, row = "SampleID")
+with_stdev <- merge(with_stdev, fame, row = "SampleID") 
+table_2 <- merge(with_stdev, no_stdev, row = "SampleID") %>%
+  na.omit(table_2)
+
+# Making numeric and rounding to 2 digits
+table_2[, 2:ncol(table_2)] <- lapply(2:ncol(table_2), function(x)as.numeric(table_2[[x]]))
+table_2[, 2:ncol(table_2)] <- lapply(2:ncol(table_2), function(x)round(table_2[[x]], digits = 2))
+
+# Combining value and stdev columns into one
+table_2 <- unite(table_2, col='Ash', c('ash', 'ash.stdev'), sep = " \u00B1 ", remove = TRUE)
+table_2 <- unite(table_2, col='Carbohydrates (PAD)', c('carbs', 'carb.stdev'), sep = " \u00B1 ", remove = TRUE)
+table_2 <- unite(table_2, col='Lipids (as FAME)', c('fame', 'fame.stdev'), sep = " \u00B1 ", remove = TRUE)
+
+# Removing SampleID column name and changing row names
+table_2 <- table_2 %>% rename(' ' = 1)
+rownames(table_2) <- c(short_names)
+table_2 <-  table_2[, -c(1)] # remove row
+```
+
+```{r}
+knitr::kable(table_2, format="markdown")
+```
+
+```{r, echo = FALSE, message=FALSE}
+library(readxl)
+library(dplyr)
+fame_and_cyclopentane_fa <- read_excel("220323_CompositionSummary_Oceanium_LL[1].xlsx", sheet = 3)
+fame_and_cyclopentane_fa <- fame_and_cyclopentane_fa
+  fame_and_cyclopentane_fa <- fame_and_cyclopentane_fa[-c(2:9)]
+  fame_and_cyclopentane_fa <- na.omit(fame_and_cyclopentane_fa)
+  fame_and_cyclopentane_fa <- fame_and_cyclopentane_fa %>%
+    rename(
+      ' ' = 1,
+      'C8:0 Caprylic acid' = 2,
+      'C10:0 Capric acid' = 3,
+      'C12:0 Lauric acid' = 4,
+      'C14:0 Myristic acid' = 5,
+      'C14:1 Myristoleic acid' = 6,
+      'C15:0 Pentadecanoic acid' = 7,
+      'C16:0 Palmitic acid' = 8,
+      'C16:1 Hexadeca-11-enoic acid' = 9,
+      'C16:1 Hexadeca-9-enoic acid, palmitic acid' = 10,
+      'C16:1 Hexadeca-7-enoic acid' = 11,
+      'C16:1 Hexadeca-6-enoic acid' = 12,
+      'C16:1 Hexadeca-5-enoic acid' = 13,
+      'C16 unknown acid' = 14,
+      'C16:2 Hexadeca-7,10-dienoic acid' = 15,
+      'C16:3 Hexadeca-9,11,13-trienoic acid' = 16,
+      'C16:4 Hexadeca-7,9,11,13-tetraenoic acid' = 17,
+      'C17:0 Heptadecanoic acid' = 18,
+      'C17:1 Heptadecenoic acid' = 19,
+      'C18:0 Stearic acid' = 20,
+      'C18:1 Oleic (n-9) acid' = 21,
+      'C18:1 Vaccenic (n-7) acid' = 22,
+      'C18:2 Linoleic acid' = 23,
+      'C18:3 Gamma Linoleic acid' = 24,
+      'C18:3 Alpha Linoleic acid' = 25,
+      'C18:4 Octadecatetraenoic, stearidonic acid' = 26,
+      'C20:0 Arachidic acid' = 27,
+      'C20:1 Eicosenoic acid' = 28,
+      'C20:2 Eicosadienoic acid' = 29,
+      'C20:3 Eicosatrienoic (n-6) acid' = 30,
+      'C20:4 Eicosatetraenoic (n-3) acid' = 31,
+      'C20:4 Arachidonic (n-6) acid' = 32,
+      'C20:5 Eicosapentaenoic acid' = 33,
+      'C22:0 Behenic acid' = 34,
+      'C22:1 Erucic acid' = 35,
+      'C22:2 Docosadenienoic acid' = 36,
+      'C22:3 Docosatrienoic acid' = 37,
+      'C22:4 Docosatetraenoic n3 acid' = 38,
+      'C22:5 Docosapentaenoic n6 acid' = 39,
+      'C22:6 Docohexaenoic acid' = 40,
+      'C24:0 Lignoceric acid' = 41,
+    )
+  fame_and_cyclopentane_fa <- as.data.frame(t(fame_and_cyclopentane_fa))
+  fame_and_cyclopentane_fa <- fame_and_cyclopentane_fa[-c(1, 10)]
+  
+  fame_and_cyclopentane_fa <- fame_and_cyclopentane_fa %>%
+    rename(
+      '22020201' = 1, 
+      '22020202' = 2,
+      '22020203' = 3,
+      '22020204' = 4, 
+      '22020205' = 5,
+      '22020206' = 6,
+      '22020207' = 7,
+      '22020208' = 8,
+    )
+```
+
+```{r}
+knitr::kable(fame_and_cyclopentane_fa, format="markdown")
+```
