@@ -1,0 +1,255 @@
+---
+title: "DISCOVR SOT Cleaning and Analyzing"
+
+output: html_document
+---
+#### Libraries
+```{r message=FALSE}
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(plotly)
+```
+
+#### Importing, formatting, and cleaning data from OpenEI DISCOVR page 
+#### https://apps.openei.org/DISCOVR/#summaryTables
+
+```{r message=FALSE, show_col_types = FALSE}
+library(readr)
+# Weather from August 26, 2019 through October 31, 2020
+# Growth Data from August 26, 2019 through October 30, 2020
+the_weather <- read.csv(file = "https://data.openei.org/files/5693/DISCOVR_SOT_weather_2020.csv")
+the_data <- read_csv(file = "https://data.openei.org/files/5693/DISCOVR_SOT_cultivation-composition_2020.csv")
+```
+
+#### Transform Datetime into POSIXct for growth and weather data then strip time from weather DateTime and isolate only date in new column
+```{r}
+library(lubridate)
+the_data$DateTime <- mdy_hm(the_data$DateTime, tz = "UTC")
+
+library(lubridate)
+library(dplyr)
+the_weather$Date <- mdy_hm(the_weather$DATETIME, tz = "UTC")
+the_weather <- the_weather %>%
+  mutate(Date = as.Date(Date))
+```
+
+#### Isolate desired date range
+```{r}
+library(dplyr)
+the_weather <- the_weather%>% 
+  filter(Date >= as.Date('2020-06-01') & Date <= as.Date('2020-06-30'))
+
+the_data <- the_data %>% 
+  filter(DateTime >= as.Date('2020-06-01 00:00:00') & DateTime <= as.Date('2020-06-30 23:55:00'))
+```
+
+#### Isolate desired strain - however, there is only one strain in June, P.Celerei
+```{r}
+strain_weather<- the_weather[(the_weather$StrainID == "P.celeri"),]
+strain_data <- the_data[(the_data$StrainID == "P.celeri"),]
+strain_data <- strain_data[!(strain_data$PondID == "inoc"),]
+```
+#### Find daily par by finding 24 hour average, then find DLI by multiplying PAR by 24 hours in day and 0.0036 conversion factor. Scalings are done for graphing purposes
+```{r}
+library(dplyr)
+PAR <- strain_weather %>%
+  group_by(Date) %>%
+  summarise(PPFD.umol.m2s = mean(HOBO.PAR))%>%
+  rowwise(PPFD.umol.m2s) %>%
+  mutate(DLI.mol.m2.day = (sum(PPFD.umol.m2s * 24 * 0.0036))) %>%
+  mutate(DLI.scaled.hundreth = (sum(PPFD.umol.m2s * 24 * 0.0036 * .01))) %>%
+  mutate(DLI.scaled.quarter = (sum(PPFD.umol.m2s * 24 * 0.0036 * 0.25)))
+```
+
+#### create long data frame for each variable
+```{r}
+strain_weather <- data.frame("DateTime" = PAR$Date, "Variable" = "DLI", "Value" = PAR$DLI.mol.m2.day, "PondID" = "DLI for all Ponds")
+strain_weather_hundreth <- data.frame("DateTime" = PAR$Date, "Variable" = "DLI", "Value" = PAR$DLI.scaled.hundreth, "PondID" = "DLI for all Ponds") 
+strain_weather_quarter <- data.frame("DateTime" = PAR$Date, "Variable" = "DLI", "Value" = PAR$DLI.scaled.quarter, "PondID" = "DLI for all Ponds")
+strain_afdw <- data.frame("DateTime" = strain_data$DateTime, "Variable" = "AFDW.AVE", "Value" = strain_data$AFDW.AVE, "PondID" = strain_data$PondID)
+strain_ahyp <- data.frame("DateTime" = strain_data$DateTime, "Variable" = "AHYP", "Value" = strain_data$AHYP.all.ponds, "PondID" = strain_data$PondID)
+strain_nh4 <- data.frame("DateTime" = strain_data$DateTime, "Variable" = "NH4.AVE", "Value" = strain_data$NH4.AVE, "PondID" = strain_data$PondID)
+strain_po4 <- data.frame("DateTime" = strain_data$DateTime, "Variable" = "PO4.AVE", "Value" = strain_data$PO4.AVE, "PondID" = strain_data$PondID)
+strain_fame <- data.frame("DateTime" = strain_data$DateTime, "Variable" = "FAME", "Value" = strain_data$FAME, "PondID" = strain_data$PondID)
+strain_carbs <- data.frame("DateTime" = strain_data$DateTime, "Variable" = "Carbohydrates", "Value" = strain_data$Carbohydrates, "PondID" = strain_data$PondID)
+strain_protein <- data.frame("DateTime" = strain_data$DateTime, "Variable" = "Protein", "Value" = strain_data$Protein, "PondID" = strain_data$PondID)
+```
+
+#### Combine into one long form data frame
+```{r}
+all_variable <- rbind(strain_afdw, strain_ahyp, strain_fame, strain_nh4, strain_po4, strain_protein, strain_carbs, strain_weather) %>%
+  na.omit((all_variable))
+dli_afdw <- rbind(strain_afdw, strain_weather_hundreth) %>%
+  na.omit((dli_afdw))
+dli_ahyp <- rbind(strain_ahyp, strain_weather_quarter) %>%
+  na.omit((dli_ahyp))
+```
+
+
+#### full thing
+
+```{r}
+library(ggplot2)
+plot1 <- ggplot(all_variable) +
+           aes(x = DateTime, y = Value, fill = Variable, colour = PondID) +
+           geom_line(size = 0.5) +
+           theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+           scale_fill_hue(direction = 1) +
+           scale_color_hue(direction = 1) +
+           labs(x = "DateTime", y = "Value", fill = "Variable", color = "PondID") +
+           theme_minimal()
+```
+
+```{r, echo = FALSE, message=FALSE}
+library(plotly)
+ggplotly(plot1)
+
+```
+
+
+#### Facets by pond all black
+```{r}
+library(ggplot2)
+plot2 <- ggplot(all_variable) +
+           aes(x = DateTime, y = Value, fill = Variable) +
+           geom_line(size = 0.5, colour = "#112446") +
+           scale_fill_hue(direction = 1) +
+           labs(x = "DateTime", y = "Value", fill = "Variable") +
+           theme_minimal() +
+           facet_wrap(vars(PondID))
+```
+
+```{r, echo = FALSE, message=FALSE}
+library(plotly)
+ggplotly(plot2)
+
+```
+
+
+```{r}
+library(ggplot2)
+### Facets by ponds, color = variable
+plot3 <- ggplot(all_variable) +
+           aes(x = DateTime, y = Value, colour = Variable) +
+           geom_line(size = 0.5) +
+           scale_color_hue(direction = 1) +
+           labs(x = "DateTime", y = "Value", color = "PondID") +
+           theme_minimal() +
+           facet_wrap(vars(PondID))
+```
+
+```{r, echo = FALSE, message=FALSE}
+library(plotly)
+ggplotly(plot3)
+
+```
+
+
+#### Facets by variable, color = PondID
+```{r}
+library(ggplot2)
+plot4 <- ggplot(all_variable) +
+           aes(x = DateTime, y = Value, colour = PondID) +
+           geom_line(size = 0.5) +
+           scale_color_hue(direction = 1) +
+           theme_minimal() +
+           facet_wrap(vars(Variable), scales = "free")
+```
+
+```{r, echo = FALSE, message=FALSE}
+library(plotly)
+ggplotly(plot4)
+
+```
+
+
+#### AFDW vs Date with points and lines
+```{r}
+library(ggplot2)
+plot5 <- ggplotly(ggplot(strain_afdw) +
+           aes(x = DateTime, y = Value, colour = PondID) +
+           geom_point(shape = "circle", size = 1.5) +
+           geom_line() +
+           scale_color_hue(direction = 1) +
+           theme_minimal() +
+           facet_wrap(vars(Variable)))
+```
+
+```{r, echo = FALSE, message=FALSE}
+library(plotly)
+ggplotly(plot5)
+
+```
+
+
+#### AFDW vs Date with lines only
+```{r}
+library(ggplot2)
+plot6 <- ggplotly(ggplot(strain_afdw) +
+           aes(x = DateTime, y = Value, colour = PondID) +
+           geom_line(size = 0.5) +
+           scale_color_hue(direction = 1) +
+           theme_minimal() +
+           facet_wrap(vars(Variable)))
+```
+
+```{r, echo = FALSE, message=FALSE}
+library(plotly)
+ggplotly(plot6)
+
+```
+
+
+#### AFDW with DLI
+```{r}
+library(ggplot2)
+plot7 <- ggplotly(ggplot(dli_afdw) +
+           aes(x = DateTime, y = Value, colour = PondID) +
+           geom_point() +
+           geom_line(size = 0.5) +
+           scale_color_hue(direction = 1) +
+           theme_minimal())
+```
+
+```{r, echo = FALSE, message=FALSE}
+library(plotly)
+ggplotly(plot7)
+
+```
+
+
+#### DLI with slope productivity (ahyp)
+```{r}
+library(ggplot2)
+plot8 <- ggplotly(ggplot(dli_ahyp) +
+  aes(x = DateTime, y = Value, colour = PondID) +
+  geom_line(size = 0.5) +
+  scale_color_hue(direction = 1) +
+  theme_minimal())
+```
+
+```{r, echo = FALSE, message=FALSE}
+library(plotly)
+ggplotly(plot8)
+
+```
+
+
+#### AFDW vs Date facets by ponds
+```{r}
+library(ggplot2)
+plot9 <- ggplotly(ggplot(strain_data) +
+           aes(x = DateTime, y = AFDW.AVE, colour = PondID) +
+           geom_line(size = 0.5) +
+           scale_color_hue(direction = 1) +
+           theme_minimal() +
+           facet_wrap(vars(PondID)))
+```
+           
+```{r, echo = FALSE, message=FALSE}
+library(plotly)
+ggplotly(plot9)
+
+```
