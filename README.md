@@ -7,7 +7,9 @@ We are a team of biofuels and biotechnology experts who are joining forces to in
 
 The objective of DISCOVR is to develop an integrated screening platform for the discovery of high-productivity and resilient strains of algae that can be cultivated outdoors year-round via crop rotation to facilitate the execution of DOE-EERE Bioenergy Technologies Office's (BETO) annual Algae State of Technology (SOT) experimental support effort, which involves demonstrating progress towards out-year biomass productivity goals as outlined in the BETO Multi-Year Program Plan. Data collection
 
-This repo contains NREL projects under the designation of DISCOVR, with each project existing in a separate folder. Below is a list of project:
+This repo contains NREL projects under the designation of DISCOVR, with each project existing in a separate folder. Below is a list of project:  
 
-Composition Standards: standardized formatting for distribution of composition data
-SOT : analyzing productivity and composition at the interface of light, temperature, and environmental conditions for algae cultivation
+- Composition Standards: standardized formatting for distribution of composition data  
+- SOT : analyzing productivity and composition at the interface of light, temperature, and environmental conditions for algae cultivation. 
+- Composition_NREL_220430_Redacted: Example output produced from composition standards and SOT work.   
+
